@@ -100,7 +100,24 @@ def scrape_toi():
         return headlines
     except Exception as e:
         return []
-
+def get_news_api_fallback():
+    api_key = os.environ.get("NEWS_API_KEY")
+    url = f"https://newsapi.org/v2/top-headlines?country=in&pageSize=9&apiKey={api_key}"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        headlines = []
+        for article in data["articles"]:
+            headlines.append({
+                "title": article["title"],
+                "link": article["url"],
+                "published": article.get("publishedAt", "")[:10],
+                "source": article["source"]["name"]
+            })
+        return headlines
+    except Exception as e:
+        return []
 def build_news_html(all_news):
     rows = ""
     for item in all_news:
@@ -184,6 +201,8 @@ def run():
     hindu = scrape_hindu()
     toi = scrape_toi()
     all_news = ndtv + hindu + toi
+    if len(all_news) < 3:
+        all_news = get_news_api_fallback()
 
     news_rows = build_news_html(all_news)
 
