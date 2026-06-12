@@ -44,6 +44,25 @@ def get_quote():
     except Exception as e:
         return f"Quote unavailable ({e})"
 
+def get_news():
+    api_key = os.environ.get("NEWS_API_KEY")
+    url = f"https://newsapi.org/v2/top-headlines?country=in&pageSize=5&apiKey={api_key}"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        articles = data["articles"]
+        news_html = ""
+        for i, article in enumerate(articles, 1):
+            title = article["title"]
+            source = article["source"]["name"]
+            link = article["url"]
+            published = article.get("publishedAt", "")[:10]
+            news_html += f"{i}. {title}\n   Source: {source} | Date: {published}\n   Link: {link}\n\n"
+        return news_html
+    except Exception as e:
+        return f"News unavailable ({e})"
+
 def send_email(subject, body):
     sender = os.environ.get("EMAIL_SENDER")
     password = os.environ.get("EMAIL_PASSWORD")
@@ -66,6 +85,7 @@ def build_summary():
     weather = get_weather()
     quote = get_quote()
     temp, description, alert = get_weather_alert()
+    news = get_news()
     summary = f"""
 ==================================
 PULSE - Daily Summary
@@ -78,6 +98,8 @@ WEATHER
 TODAY'S QUOTE
   {quote}
 
+TOP NEWS
+{news}
 ==================================
 """
     if alert:
@@ -89,6 +111,7 @@ def run():
     print(summary)
     with open("daily_summary.txt", "w", encoding="utf-8") as f:
         f.write(summary)
+    send_email(f"Pulse Daily Summary - {date.today().strftime('%d %B %Y')}", summary)
     if alert:
         send_email("Pulse Weather Alert!", alert)
     print("Pulse ran successfully.")
