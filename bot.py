@@ -1,6 +1,7 @@
 import requests
 import smtplib
 import os
+import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import date
@@ -52,16 +53,60 @@ def get_news():
         response.raise_for_status()
         data = response.json()
         articles = data["articles"]
-        news_html = ""
+        news_text = ""
         for i, article in enumerate(articles, 1):
             title = article["title"]
             source = article["source"]["name"]
             link = article["url"]
             published = article.get("publishedAt", "")[:10]
-            news_html += f"{i}. {title}\n   Source: {source} | Date: {published}\n   Link: {link}\n\n"
-        return news_html
+            news_text += f"{i}. {title}\n   Source: {source} | Date: {published}\n   Link: {link}\n\n"
+        return news_text
     except Exception as e:
         return f"News unavailable ({e})"
+
+def get_github_repos():
+    token = os.environ.get("GH_TOKEN")
+    headers = {"Authorization": f"token {token}"}
+    url = "https://api.github.com/user/repos?sort=updated&per_page=10"
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        repos = response.json()
+        projects = []
+        for repo in repos:
+            projects.append({
+                "name": repo["name"],
+                "description": repo["description"] or "",
+                "url": repo["html_url"],
+                "stars": repo["stargazers_count"],
+                "updated": repo["updated_at"][:10]
+            })
+        return projects
+    except Exception as e:
+        print(f"GitHub repos unavailable ({e})")
+        return []
+
+def update_portfolio(projects):
+    token = os.environ.get("GH_TOKEN")
+    username = "viinayaa"
+    repo = "pulse"
+    headers = {
+        "Authorization": f"token {token}",
+        "Content-Type": "application/json"
+    }
+    content = json.dumps(projects, indent=2)
+    import base64
+    encoded = base64.b64encode(content.encode()).decode()
+    get_url = f"https://api.github.com/repos/{username}/{repo}/contents/projects.json"
+    get_response = requests.get(get_url, headers=headers)
+    payload = {
+        "message": "Auto-update projects.json",
+        "content": encoded
+    }
+    if get_response.status_code == 200:
+        payload["sha"] = get_response.json()["sha"]
+    requests.put(get_url, headers=headers, json=payload)
+    print("Portfolio updated.")
 
 def send_email(subject, body):
     sender = os.environ.get("EMAIL_SENDER")
@@ -114,6 +159,9 @@ def run():
     send_email(f"Pulse Daily Summary - {date.today().strftime('%d %B %Y')}", summary)
     if alert:
         send_email("Pulse Weather Alert!", alert)
+    projects = get_github_repos()
+    if projects:
+        update_portfolio(projects)
     print("Pulse ran successfully.")
 
 if __name__ == "__main__":
